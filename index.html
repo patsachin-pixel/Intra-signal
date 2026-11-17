@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signal Desk</title>
+<link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#14202b"><link rel="icon" href="/icon-192.png">
+<style>
+:root{--bg:#eef1f4;--ink:#14202b;--mut:#5d6b78;--card:#fff;--line:#d5dce3;--buy:#0f8a5f;--sell:#c2412d;--wait:#7a828c}
+@media(prefers-color-scheme:dark){:root{--bg:#0f161d;--ink:#e6ecf2;--mut:#93a1ae;--card:#18222c;--line:#2a3743}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif;padding:16px;max-width:560px;margin-inline:auto}
+h1{font-size:1.3rem;margin:0 0 12px}
+.row{display:flex;gap:8px}input{flex:1;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:1rem;text-transform:uppercase}
+button{padding:12px 16px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font-weight:600;font-size:1rem}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.chips button{padding:6px 12px;background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.verdict{border-radius:12px;padding:20px;color:#fff;margin:12px 0}.BUY{background:var(--buy)}.SELL{background:var(--sell)}.WAIT{background:var(--wait)}
+.verdict b{font-size:2.6rem;display:block;line-height:1.1}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px}
+.card h2{font-size:1rem;margin:0 0 8px}.li{display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--line);gap:10px}.li:first-of-type{border-top:0}
+.p{color:var(--buy);font-weight:600}.n{color:var(--sell);font-weight:600}.z{color:var(--mut)}.mut{color:var(--mut);font-size:.85rem}
+label{display:flex;gap:6px;align-items:center;margin:6px 0}
+</style></head><body>
+<h1>Signal Desk</h1>
+<div class="row"><input id="s" value="PNB" aria-label="NSE symbol"><button id="go">Analyse</button></div>
+<div class="chips" id="chips"></div>
+<label class="mut"><input type="checkbox" id="auto"> Refresh every 60 s</label>
+<div id="out"></div>
+<p class="mut">Data is delayed (Yahoo). Signals are rule-based, not advice. Always use the stop.</p>
+<script>
+const $=id=>document.getElementById(id),cls=v=>v>0?'p':v<0?'n':'z',sg=v=>v>0?'+'+v:v;
+['PNB','HDFCBANK','ITC','SBIN','RELIANCE'].forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>{$('s').value=t;run()};$('chips').append(b)});
+const rows=(a,f)=>a.length?a.map(f).join(''):'<div class="z">None</div>';
+async function run(){
+  const out=$('out');out.innerHTML='<p class="mut">Analysing…</p>';
+  try{
+    const r=await fetch('/api/analyze?symbol='+encodeURIComponent($('s').value));
+    if(!r.ok)throw new Error((await r.json()).detail||'Request failed');
+    const d=await r.json(),L=d.levels;
+    out.innerHTML=`<div class="verdict ${d.signal}"><b>${d.signal}</b>${d.symbol} ₹${d.price} · last bar ${d.last_bar}<br>Total score ${sg(d.score.total)} (indicators ${sg(d.score.indicators)}, patterns ${sg(d.score.patterns)}, news ${sg(d.score.news)})</div>
+    ${L?`<div class="card"><h2>Trade levels</h2><div class="li"><span>Entry</span><span>${L.entry}</span></div><div class="li"><span>Stop</span><span class="n">${L.stop}</span></div><div class="li"><span>Target</span><span class="p">${L.target}</span></div></div>`:''}
+    <div class="card"><h2>Indicators</h2>${rows(d.votes,x=>`<div class="li"><span>${x.name}</span><span class="${cls(x.v)}">${x.v>0?'Bullish':x.v<0?'Bearish':'Neutral'}</span></div>`)}</div>
+    <div class="card"><h2>Chart patterns</h2>${rows(d.patterns,x=>`<div class="li"><span>${x.name}</span><span class="${cls(x.v)}">${sg(x.v)}</span></div>`)}</div>
+    <div class="card"><h2>Latest news</h2>${rows(d.news,x=>`<div class="li"><span>${x.title}</span><span class="${cls(x.score)}">${sg(x.score)}</span></div>`)}</div>`;
+  }catch(e){out.innerHTML=`<div class="card n">${e.message}</div>`}
+}
+$('go').onclick=run;$('s').onkeydown=e=>e.key==='Enter'&&run();
+let t;$('auto').onchange=e=>{clearInterval(t);if(e.target.checked)t=setInterval(run,60000)};
+run();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
+</script></body></html>
